@@ -1,14 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 const WAYBACK = 'https://web.archive.org';
-const DEFAULT_URL = 'https://example.com';
 
 function normalizeUrl(value) {
   const trimmed = value.trim();
-
-  if (!trimmed) {
-    throw new Error('Enter a website URL to begin.');
-  }
+  if (!trimmed) throw new Error('Enter a website URL to begin.');
 
   const withProtocol = /^https?:\/\//i.test(trimmed)
     ? trimmed
@@ -17,39 +13,39 @@ function normalizeUrl(value) {
   const parsed = new URL(withProtocol);
 
   if (!parsed.hostname || !parsed.hostname.includes('.')) {
-    throw new Error(
-      'Enter a valid website URL, such as example.com.'
-    );
+    throw new Error('Enter a valid website URL, such as example.com.');
   }
 
   return parsed.href;
 }
 
 function snapshotUrl(snapshot, target) {
+  if (!snapshot || !snapshot.timestamp) return '#';
   return `${WAYBACK}/web/${snapshot.timestamp}/${target}`;
 }
 
-function formatDate(timestamp, options = {}) {
-  const date = new Date(
-    `${timestamp.slice(0, 4)}-${timestamp.slice(
-      4,
-      6
-    )}-${timestamp.slice(6, 8)}T${timestamp.slice(
-      8,
-      10
-    )}:${timestamp.slice(10, 12)}:${timestamp.slice(
-      12,
-      14
-    )}Z`
+function toDate(timestamp) {
+  if (!timestamp || timestamp.length < 14) return new Date();
+  return new Date(
+    Date.UTC(
+      Number(timestamp.slice(0, 4)),
+      Number(timestamp.slice(4, 6)) - 1,
+      Number(timestamp.slice(6, 8)),
+      Number(timestamp.slice(8, 10)),
+      Number(timestamp.slice(10, 12)),
+      Number(timestamp.slice(12, 14))
+    )
   );
+}
 
+function formatDate(timestamp, options = {}) {
   return new Intl.DateTimeFormat('en-US', {
     month: 'long',
     day: 'numeric',
     year: 'numeric',
     timeZone: 'UTC',
     ...options,
-  }).format(date);
+  }).format(toDate(timestamp));
 }
 
 function formatShortDate(timestamp) {
@@ -58,56 +54,38 @@ function formatShortDate(timestamp) {
     day: 'numeric',
     year: 'numeric',
     timeZone: 'UTC',
-  }).format(
-    new Date(
-      `${timestamp.slice(0, 4)}-${timestamp.slice(
-        4,
-        6
-      )}-${timestamp.slice(6, 8)}T${timestamp.slice(
-        8,
-        10
-      )}:${timestamp.slice(10, 12)}:${timestamp.slice(
-        12,
-        14
-      )}Z`
-    )
-  );
+  }).format(toDate(timestamp));
 }
 
 function formatTime(timestamp) {
-  return `${timestamp.slice(8, 10)}:${timestamp.slice(
-    10,
-    12
-  )}:${timestamp.slice(12, 14)} UTC`;
+  if (!timestamp || timestamp.length < 14) return '00:00:00 UTC';
+  return `${timestamp.slice(8, 10)}:${timestamp.slice(10, 12)}:${timestamp.slice(12, 14)} UTC`;
 }
 
 function parseRows(payload) {
-  if (!Array.isArray(payload) || payload.length < 2) {
-    return [];
-  }
+  if (!Array.isArray(payload) || payload.length < 2) return [];
 
   const [headers, ...rows] = payload;
+  const timestampIndex = headers.indexOf('timestamp');
 
   return rows
     .filter(
       (row) =>
         Array.isArray(row) &&
-        /^\d{14}$/.test(row[headers.indexOf('timestamp')])
+        timestampIndex >= 0 &&
+        /^\d{14}$/.test(row[timestampIndex])
     )
     .map((row) =>
       Object.fromEntries(
-        headers.map((header, index) => [
-          header,
-          row[index] ?? '',
-        ])
+        headers.map((header, index) => [header, row[index] ?? ''])
       )
     )
-    .sort((a, b) =>
-      a.timestamp.localeCompare(b.timestamp)
-    );
+    .sort((a, b) => a.timestamp.localeCompare(b.timestamp));
 }
 
 function getInitialTheme() {
+  if (typeof window === 'undefined') return 'dark';
+
   const saved = localStorage.getItem('itm-theme');
 
   if (saved === 'light' || saved === 'dark') {
@@ -124,43 +102,37 @@ export default function App() {
   const [searchedUrl, setSearchedUrl] = useState('');
   const [snapshots, setSnapshots] = useState([]);
   const [selectedIndex, setSelectedIndex] = useState(0);
-  const [compareIndex, setCompareIndex] = useState(null);
+  const [compareIndex, setCompareIndex] = useState(0);
   const [status, setStatus] = useState('idle');
   const [error, setError] = useState('');
-  const [errorTitle, setErrorTitle] =
-    useState('INPUT ERROR');
+  const [errorTitle, setErrorTitle] = useState('INPUT ERROR');
   const [iframeError, setIframeError] = useState(false);
   const [showCompare, setShowCompare] = useState(false);
   const [theme, setTheme] = useState(getInitialTheme);
+  const [machineActive, setMachineActive] = useState(false);
+  const [cursor, setCursor] = useState({ x: 0, y: 0 });
+  const [scrollProgress, setScrollProgress] = useState(0);
 
   const timelineRef = useRef(null);
+  const heroRef = useRef(null);
 
-  const selected = snapshots[selectedIndex];
-
-  const compare =
-    compareIndex === null
-      ? null
-      : snapshots[compareIndex];
+  const selected = snapshots[selectedIndex] || null;
+  const compare = snapshots[compareIndex] || null;
 
   const domain = useMemo(() => {
     try {
-      return new URL(searchedUrl)
-        .hostname.replace(/^www\./, '')
+      return new URL(searchedUrl).hostname
+        .replace(/^www\./, '')
         .toUpperCase();
     } catch {
       return 'ARCHIVE TARGET';
     }
   }, [searchedUrl]);
 
-  const timelineYears = useMemo(() => {
-    return [
-      ...new Set(
-        snapshots.map((item) =>
-          item.timestamp.slice(0, 4)
-        )
-      ),
-    ];
-  }, [snapshots]);
+  const timelineYears = useMemo(
+    () => [...new Set(snapshots.map((item) => item.timestamp.slice(0, 4)))],
+    [snapshots]
+  );
 
   const earliest = snapshots[0];
   const latest = snapshots[snapshots.length - 1];
@@ -169,6 +141,43 @@ export default function App() {
     document.documentElement.dataset.theme = theme;
     localStorage.setItem('itm-theme', theme);
   }, [theme]);
+
+  useEffect(() => {
+    const move = (event) => {
+      if (window.matchMedia('(pointer: coarse)').matches) return;
+
+      const x = event.clientX / window.innerWidth - 0.5;
+      const y = event.clientY / window.innerHeight - 0.5;
+
+      setCursor({ x, y });
+    };
+
+    window.addEventListener('pointermove', move, { passive: true });
+
+    return () => window.removeEventListener('pointermove', move);
+  }, []);
+
+  useEffect(() => {
+    const updateScroll = () => {
+      const max =
+        document.documentElement.scrollHeight - window.innerHeight;
+
+      setScrollProgress(max > 0 ? window.scrollY / max : 0);
+    };
+
+    window.addEventListener('scroll', updateScroll, { passive: true });
+
+    updateScroll();
+
+    return () => window.removeEventListener('scroll', updateScroll);
+  }, []);
+
+  useEffect(() => {
+    if (!heroRef.current) return;
+
+    heroRef.current.style.setProperty('--mx', `${cursor.x}`);
+    heroRef.current.style.setProperty('--my', `${cursor.y}`);
+  }, [cursor]);
 
   async function searchArchive(event) {
     event?.preventDefault();
@@ -191,12 +200,13 @@ export default function App() {
     setUrl(target);
     setStatus('searching');
     setSnapshots([]);
-    setCompareIndex(null);
+    setMachineActive(true);
 
     try {
-      const endpoint = `/api/wayback?url=${encodeURIComponent(
+      // Direct Wayback CDX API Fallback if backend proxy endpoint isn't defined
+      const endpoint = `https://web.archive.org/cdx/search/cdx?url=${encodeURIComponent(
         target
-      )}`;
+      )}&output=json&fl=timestamp,original,digest&filter=statuscode:200&collapse=timestamp:8`;
 
       const response = await fetch(endpoint, {
         headers: {
@@ -205,9 +215,7 @@ export default function App() {
       });
 
       if (!response.ok) {
-        throw new Error(
-          `Archive responded with HTTP ${response.status}.`
-        );
+        throw new Error(`Archive responded with HTTP ${response.status}.`);
       }
 
       const rows = parseRows(await response.json());
@@ -215,26 +223,24 @@ export default function App() {
       if (!rows.length) {
         setStatus('empty');
         setSearchedUrl(target);
+        setMachineActive(false);
         return;
       }
 
       setSearchedUrl(target);
       setSnapshots(rows);
-
-      // Rows are explicitly sorted oldest -> newest.
-      // Start at the newest real capture.
       setSelectedIndex(rows.length - 1);
-
+      setCompareIndex(Math.max(0, rows.length - 2));
       setStatus('ready');
 
       window.setTimeout(() => {
-        document
-          .querySelector('.archive-desk')
-          ?.scrollIntoView({
-            behavior: 'smooth',
-            block: 'start',
-          });
-      }, 60);
+        document.querySelector('.archive-desk')?.scrollIntoView({
+          behavior: 'smooth',
+          block: 'start',
+        });
+
+        setMachineActive(false);
+      }, 650);
     } catch (err) {
       setStatus('error');
       setErrorTitle('ARCHIVE UNAVAILABLE');
@@ -244,12 +250,17 @@ export default function App() {
           ? 'The archive could not be reached. Check your connection and try again.'
           : err.message
       );
+
+      setMachineActive(false);
     }
   }
 
   function selectSnapshot(index) {
     setIframeError(false);
     setSelectedIndex(index);
+    if (compareIndex === index) {
+      setCompareIndex(Math.max(0, index - 1));
+    }
   }
 
   function scrollTimeline(amount) {
@@ -261,18 +272,16 @@ export default function App() {
 
   function jumpToYear(year) {
     const index = snapshots.findIndex(
-      (snapshot) =>
-        snapshot.timestamp.slice(0, 4) === year
+      (snapshot) => snapshot.timestamp.slice(0, 4) === year
     );
 
     if (index >= 0) {
       selectSnapshot(index);
-      document
-        .querySelector('.snapshot-layout')
-        ?.scrollIntoView({
-          behavior: 'smooth',
-          block: 'start',
-        });
+
+      document.querySelector('.snapshot-layout')?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'start',
+      });
     }
   }
 
@@ -282,8 +291,17 @@ export default function App() {
   }, [selected]);
 
   return (
-    <main className="app-shell">
+    <main className={`app-shell ${machineActive ? 'machine-active' : ''}`}>
+      <div
+        className="scroll-progress"
+        style={{ transform: `scaleX(${scrollProgress})` }}
+      />
+
       <div className="noise" aria-hidden="true" />
+
+      <div className="ambient ambient-one" aria-hidden="true" />
+      <div className="ambient ambient-two" aria-hidden="true" />
+      <div className="ambient ambient-three" aria-hidden="true" />
 
       <header className="topbar">
         <a
@@ -313,6 +331,7 @@ export default function App() {
                 : 'ARCHIVE CONNECTED'}
 
             <span className="topbar-separator">/</span>
+
             WAYBACK MACHINE
           </div>
 
@@ -321,38 +340,53 @@ export default function App() {
             type="button"
             onClick={() =>
               setTheme((current) =>
-                current === 'dark'
-                  ? 'light'
-                  : 'dark'
+                current === 'dark' ? 'light' : 'dark'
               )
             }
             aria-label={`Switch to ${
-              theme === 'dark'
-                ? 'light'
-                : 'dark'
+              theme === 'dark' ? 'light' : 'dark'
             } mode`}
           >
-            <span>
-              {theme === 'dark' ? '☼' : '◐'}
-            </span>
-
-            {theme === 'dark'
-              ? 'LIGHT'
-              : 'DARK'}
+            <span>{theme === 'dark' ? '☼' : '◐'}</span>
+            {theme === 'dark' ? 'LIGHT' : 'DARK'}
           </button>
         </div>
       </header>
 
-      <section className="hero" id="top">
+      <section className="hero" id="top" ref={heroRef}>
+        <div className="hero-grid-system" aria-hidden="true">
+          <span />
+          <span />
+          <span />
+          <span />
+          <span />
+        </div>
+
+        <div className="time-orbit orbit-back" aria-hidden="true">
+          <div className="orbit-ring ring-a" />
+          <div className="orbit-ring ring-b" />
+          <div className="orbit-ring ring-c" />
+
+          <div className="orbit-core">
+            <span>WEB</span>
+            <strong>∞</strong>
+          </div>
+
+          <i className="orbit-dot dot-a">1996</i>
+          <i className="orbit-dot dot-b">2008</i>
+          <i className="orbit-dot dot-c">2026</i>
+        </div>
+
         <div className="hero-kicker">
           <span className="crosshair">＋</span>
           AN EXPERIMENTAL WEB ARCHIVE INTERFACE
           <span className="hero-line" />
+          <span className="hero-index">001 / 001</span>
         </div>
 
         <div className="hero-grid">
-          <div>
-            <p className="eyebrow">
+          <div className="hero-title-wrap">
+            <p className="eyebrow hero-eyebrow">
               THE INTERNET, RECORDED
             </p>
 
@@ -361,12 +395,18 @@ export default function App() {
               <br />
               <em>TIME MACHINE</em>
             </h1>
+
+            <div className="title-coordinate">
+              <span>LAT 00° / WEB</span>
+              <span>CHRONOLOGICAL INTERFACE</span>
+            </div>
           </div>
 
           <div className="hero-aside">
+            <div className="aside-number">T−∞</div>
+
             <p>
-              Explore how the web looked before it
-              became what it is today.
+              Explore how the web looked before it became what it is today.
             </p>
 
             <div className="aside-index">
@@ -377,13 +417,15 @@ export default function App() {
           </div>
         </div>
 
-        <form
-          className="search-form"
-          onSubmit={searchArchive}
-        >
-          <label htmlFor="url">
-            ENTER A URL TO BEGIN
-          </label>
+        <div className="machine-dial" aria-hidden="true">
+          <div className="dial-line" />
+          <span>PAST</span>
+          <span>PRESENT</span>
+          <span>FUTURE</span>
+        </div>
+
+        <form className="search-form" onSubmit={searchArchive}>
+          <label htmlFor="url">ENTER A URL TO BEGIN</label>
 
           <div className="search-row">
             <span className="protocol">URL://</span>
@@ -391,33 +433,36 @@ export default function App() {
             <input
               id="url"
               value={url}
-              onChange={(event) =>
-                setUrl(event.target.value)
-              }
+              onChange={(event) => setUrl(event.target.value)}
               placeholder="example.com"
               autoComplete="url"
               spellCheck="false"
             />
 
-            <button
-              type="submit"
-              disabled={status === 'searching'}
-            >
-              {status === 'searching'
-                ? 'SEARCHING…'
-                : 'ENTER ARCHIVE'}
-              <span>↗</span>
+            <button type="submit" disabled={status === 'searching'}>
+              <span>
+                {status === 'searching'
+                  ? 'QUERYING…'
+                  : 'ENTER ARCHIVE'}
+              </span>
+              <b>↗</b>
             </button>
           </div>
 
           <div className="form-foot">
-            <span>
-              WAYBACK MACHINE / HISTORICAL WEB ARCHIVE
-            </span>
-
+            <span>WAYBACK MACHINE / HISTORICAL WEB ARCHIVE</span>
             <span>HTTPS PREFERRED</span>
           </div>
         </form>
+
+        {status === 'searching' && (
+          <div className="machine-sequence" aria-live="polite">
+            <span className="sequence-pulse" />
+            <span>
+              CONNECTING → QUERYING → RECONSTRUCTING
+            </span>
+          </div>
+        )}
 
         {status === 'error' && (
           <div className="message error-message">
@@ -428,17 +473,19 @@ export default function App() {
 
         {status === 'empty' && (
           <div className="message empty-message">
-            <strong>
-              NO ARCHIVED SNAPSHOTS FOUND
-            </strong>
+            <strong>NO ARCHIVED SNAPSHOTS FOUND</strong>
 
             <span>
-              The archive returned no captures for{' '}
-              {searchedUrl}. Try the root domain or
-              another URL.
+              The archive returned no captures for {searchedUrl}. Try the
+              root domain or another URL.
             </span>
           </div>
         )}
+
+        <div className="scroll-cue" aria-hidden="true">
+          <span>SCROLL TO TRAVEL</span>
+          <i />
+        </div>
       </section>
 
       {status === 'searching' && (
@@ -448,56 +495,41 @@ export default function App() {
         </section>
       )}
 
-      {snapshots.length > 0 && (
-        <section
-          className="archive-desk"
-          aria-label="Archive results"
-        >
-          <div className="section-heading">
-            <div>
-              <p className="eyebrow">
-                ARCHIVE TARGET
-              </p>
+      {snapshots.length > 0 && selected && (
+        <section className="archive-desk" aria-label="Archive results">
+          <div className="section-reveal">
+            <div className="section-heading">
+              <div>
+                <p className="eyebrow">ARCHIVE TARGET</p>
+                <h2>{domain}</h2>
+              </div>
 
-              <h2>{domain}</h2>
+              <div className="result-count">
+                <span>{snapshots.length.toLocaleString()}</span>{' '}
+                DAILY CAPTURES
+                <br />
+                RETURNED BY CDX
+              </div>
             </div>
 
-            <div className="result-count">
-              <span>
-                {snapshots.length.toLocaleString()}
-              </span>{' '}
-              DAILY CAPTURES
-              <br />
-              RETURNED BY CDX
-            </div>
-          </div>
+            <div className="history-summary">
+              <div>
+                <span>EARLIEST</span>
+                <strong>{formatShortDate(earliest.timestamp)}</strong>
+              </div>
 
-          <div className="history-summary">
-            <div>
-              <span>EARLIEST</span>
-              <strong>
-                {formatShortDate(
-                  earliest.timestamp
-                )}
-              </strong>
-            </div>
+              <div className="history-range">
+                <span>HISTORICAL RANGE</span>
+                <strong>
+                  {earliest.timestamp.slice(0, 4)} —{' '}
+                  {latest.timestamp.slice(0, 4)}
+                </strong>
+              </div>
 
-            <div className="history-range">
-              <span>HISTORICAL RANGE</span>
-              <strong>
-                {earliest.timestamp.slice(0, 4)}
-                {' — '}
-                {latest.timestamp.slice(0, 4)}
-              </strong>
-            </div>
-
-            <div>
-              <span>LATEST</span>
-              <strong>
-                {formatShortDate(
-                  latest.timestamp
-                )}
-              </strong>
+              <div>
+                <span>LATEST</span>
+                <strong>{formatShortDate(latest.timestamp)}</strong>
+              </div>
             </div>
           </div>
 
@@ -516,76 +548,56 @@ export default function App() {
           <div className="timeline-wrap">
             <button
               className="timeline-arrow left"
-              onClick={() =>
-                scrollTimeline(-420)
-              }
+              type="button"
+              onClick={() => scrollTimeline(-420)}
               aria-label="Scroll timeline left"
             >
               ←
             </button>
 
-            <div
-              className="timeline-scroller"
-              ref={timelineRef}
-            >
+            <div className="timeline-scroller" ref={timelineRef}>
               <div className="timeline-years">
                 {timelineYears.map((year) => (
-                  <span key={year}>
-                    {year}
-                  </span>
+                  <span key={year}>{year}</span>
                 ))}
               </div>
 
               <div className="timeline-track">
                 <span className="track-line" />
 
-                {snapshots.map(
-                  (item, index) => (
-                    <button
-                      key={`${item.timestamp}-${item.digest}-${index}`}
-                      className={`timeline-point ${
-                        index === selectedIndex
-                          ? 'selected'
-                          : ''
-                      }`}
-                      style={{
-                        left: `${
-                          snapshots.length === 1
-                            ? 50
-                            : (index /
-                                (snapshots.length -
-                                  1)) *
-                              100
-                        }%`,
-                      }}
-                      onClick={() =>
-                        selectSnapshot(index)
-                      }
-                      title={`${formatShortDate(
-                        item.timestamp
-                      )} · ${formatTime(
-                        item.timestamp
-                      )}`}
-                    >
-                      <span className="point-dot" />
-
-                      <span className="point-label">
-                        {item.timestamp.slice(
-                          0,
-                          4
-                        )}
-                      </span>
-                    </button>
-                  )
-                )}
+                {snapshots.map((item, index) => (
+                  <button
+                    key={`${item.timestamp}-${index}`}
+                    className={`timeline-point ${
+                      index === selectedIndex ? 'selected' : ''
+                    }`}
+                    style={{
+                      left: `${
+                        snapshots.length === 1
+                          ? 50
+                          : (index / (snapshots.length - 1)) * 100
+                      }%`,
+                    }}
+                    onClick={() => selectSnapshot(index)}
+                    title={`${formatShortDate(
+                      item.timestamp
+                    )} · ${formatTime(item.timestamp)}`}
+                    type="button"
+                  >
+                    <span className="point-halo" />
+                    <span className="point-dot" />
+                    <span className="point-label">
+                      {item.timestamp.slice(0, 4)}
+                    </span>
+                  </button>
+                ))}
               </div>
             </div>
 
             <button
               className="timeline-arrow right"
-              onClick={() =>
-                scrollTimeline(420)
-              }
+              type="button"
+              onClick={() => scrollTimeline(420)}
               aria-label="Scroll timeline right"
             >
               →
@@ -593,21 +605,19 @@ export default function App() {
           </div>
 
           <div className="timeline-note">
+            <span>DRAG / SCROLL TO TRAVEL THROUGH TIME</span>
             <span>
-              DRAG / SCROLL TO TRAVEL THROUGH TIME
-            </span>
-
-            <span>
-              {selectedIndex + 1} /{' '}
-              {snapshots.length}
+              {selectedIndex + 1} / {snapshots.length}
             </span>
           </div>
 
           <div className="snapshot-layout">
             <aside className="snapshot-info">
-              <p className="eyebrow">
-                ARCHIVED SNAPSHOT
-              </p>
+              <div className="snapshot-index">
+                CAPTURE / {String(selectedIndex + 1).padStart(4, '0')}
+              </div>
+
+              <p className="eyebrow">ARCHIVED SNAPSHOT</p>
 
               <h3>{domain}</h3>
 
@@ -627,12 +637,7 @@ export default function App() {
                   {Math.max(
                     0,
                     new Date().getUTCFullYear() -
-                      Number(
-                        selected.timestamp.slice(
-                          0,
-                          4
-                        )
-                      )
+                      Number(selected.timestamp.slice(0, 4))
                   )}{' '}
                   YEARS AGO.
                 </strong>
@@ -642,49 +647,28 @@ export default function App() {
                 <div>
                   <dt>CAPTURE</dt>
                   <dd>
-                    {selected.timestamp.slice(
-                      0,
-                      4
-                    )}
-                    -
-                    {selected.timestamp.slice(
-                      4,
-                      6
-                    )}
-                    -
-                    {selected.timestamp.slice(
-                      6,
-                      8
-                    )}
+                    {selected.timestamp.slice(0, 4)}-
+                    {selected.timestamp.slice(4, 6)}-
+                    {selected.timestamp.slice(6, 8)}
                   </dd>
                 </div>
 
                 <div>
                   <dt>TIME</dt>
-                  <dd>
-                    {formatTime(
-                      selected.timestamp
-                    )}
-                  </dd>
+                  <dd>{formatTime(selected.timestamp)}</dd>
                 </div>
 
                 <div>
                   <dt>SOURCE</dt>
-                  <dd>
-                    INTERNET ARCHIVE
-                  </dd>
+                  <dd>INTERNET ARCHIVE</dd>
                 </div>
               </dl>
 
               <div className="nav-controls">
                 <button
+                  type="button"
                   onClick={() =>
-                    selectSnapshot(
-                      Math.max(
-                        0,
-                        selectedIndex - 1
-                      )
-                    )
+                    selectSnapshot(Math.max(0, selectedIndex - 1))
                   }
                   disabled={selectedIndex === 0}
                 >
@@ -692,6 +676,7 @@ export default function App() {
                 </button>
 
                 <button
+                  type="button"
                   onClick={() =>
                     selectSnapshot(
                       Math.min(
@@ -700,10 +685,7 @@ export default function App() {
                       )
                     )
                   }
-                  disabled={
-                    selectedIndex ===
-                    snapshots.length - 1
-                  }
+                  disabled={selectedIndex === snapshots.length - 1}
                 >
                   NEXT →
                 </button>
@@ -711,10 +693,7 @@ export default function App() {
 
               <a
                 className="open-link"
-                href={snapshotUrl(
-                  selected,
-                  searchedUrl
-                )}
+                href={snapshotUrl(selected, searchedUrl)}
                 target="_blank"
                 rel="noreferrer"
               >
@@ -724,16 +703,15 @@ export default function App() {
 
             <div
               className={`viewer ${
-                iframeError
-                  ? 'viewer-fallback'
-                  : ''
+                iframeError ? 'viewer-fallback' : ''
               }`}
             >
+              <div className="viewer-depth depth-one" />
+              <div className="viewer-depth depth-two" />
+
               {iframeError ? (
                 <div className="fallback">
-                  <span className="fallback-mark">
-                    ⊘
-                  </span>
+                  <span className="fallback-mark">⊘</span>
 
                   <p>
                     THIS ARCHIVE CANNOT
@@ -742,10 +720,7 @@ export default function App() {
                   </p>
 
                   <a
-                    href={snapshotUrl(
-                      selected,
-                      searchedUrl
-                    )}
+                    href={snapshotUrl(selected, searchedUrl)}
                     target="_blank"
                     rel="noreferrer"
                   >
@@ -756,26 +731,18 @@ export default function App() {
                 <>
                   <div className="viewer-chrome">
                     <span>
-                      WAYBACK /{' '}
-                      {selected.timestamp}
+                      WAYBACK / {selected.timestamp}
                     </span>
 
-                    <span>
-                      LIVE FRAME
-                    </span>
+                    <span>LIVE FRAME</span>
                   </div>
 
                   <iframe
                     title={`Archived snapshot of ${domain} from ${formatDate(
                       selected.timestamp
                     )}`}
-                    src={snapshotUrl(
-                      selected,
-                      searchedUrl
-                    )}
-                    onError={() =>
-                      setIframeError(true)
-                    }
+                    src={snapshotUrl(selected, searchedUrl)}
+                    onError={() => setIframeError(true)}
                   />
                 </>
               )}
@@ -785,30 +752,18 @@ export default function App() {
           <div className="compare-section">
             <div className="compare-header">
               <div>
-                <p className="eyebrow">
-                  OPTIONAL VIEW
-                </p>
-
-                <h3>
-                  COMPARE MOMENTS
-                </h3>
+                <p className="eyebrow">OPTIONAL VIEW</p>
+                <h3>COMPARE MOMENTS</h3>
               </div>
 
               <button
                 className={`compare-toggle ${
-                  showCompare
-                    ? 'active'
-                    : ''
+                  showCompare ? 'active' : ''
                 }`}
-                onClick={() =>
-                  setShowCompare(
-                    !showCompare
-                  )
-                }
+                type="button"
+                onClick={() => setShowCompare(!showCompare)}
               >
-                {showCompare
-                  ? 'CLOSE COMPARE'
-                  : 'COMPARE'}
+                {showCompare ? 'CLOSE COMPARE' : 'COMPARE'}{' '}
                 <span>＋</span>
               </button>
             </div>
@@ -817,49 +772,29 @@ export default function App() {
               <div className="compare-controls">
                 <label>
                   BEFORE
-
                   <select
-                    value={
-                      compareIndex ??
-                      Math.max(
-                        0,
-                        selectedIndex - 1
-                      )
-                    }
+                    value={compareIndex}
                     onChange={(event) =>
-                      setCompareIndex(
-                        Number(
-                          event.target.value
-                        )
-                      )
+                      setCompareIndex(Number(event.target.value))
                     }
                   >
-                    {snapshots.map(
-                      (item, index) => (
-                        <option
-                          key={`${item.timestamp}-${index}`}
-                          value={index}
-                        >
-                          {formatShortDate(
-                            item.timestamp
-                          )}
-                        </option>
-                      )
-                    )}
+                    {snapshots.map((item, index) => (
+                      <option
+                        key={`${item.timestamp}-${index}`}
+                        value={index}
+                      >
+                        {formatShortDate(item.timestamp)}
+                      </option>
+                    ))}
                   </select>
                 </label>
 
-                <span className="versus">
-                  VS
-                </span>
+                <span className="versus">VS</span>
 
                 <div className="compare-selected">
                   <span>AFTER</span>
-
                   <strong>
-                    {formatShortDate(
-                      selected.timestamp
-                    )}
+                    {formatShortDate(selected.timestamp)}
                   </strong>
                 </div>
               </div>
@@ -869,35 +804,23 @@ export default function App() {
               <div className="compare-grid">
                 <div className="compare-frame">
                   <div className="compare-label">
-                    BEFORE /{' '}
-                    {formatShortDate(
-                      compare.timestamp
-                    )}
+                    BEFORE / {formatShortDate(compare.timestamp)}
                   </div>
 
                   <iframe
                     title={`Before snapshot of ${domain}`}
-                    src={snapshotUrl(
-                      compare,
-                      searchedUrl
-                    )}
+                    src={snapshotUrl(compare, searchedUrl)}
                   />
                 </div>
 
                 <div className="compare-frame">
                   <div className="compare-label">
-                    AFTER /{' '}
-                    {formatShortDate(
-                      selected.timestamp
-                    )}
+                    AFTER / {formatShortDate(selected.timestamp)}
                   </div>
 
                   <iframe
                     title={`After snapshot of ${domain}`}
-                    src={snapshotUrl(
-                      selected,
-                      searchedUrl
-                    )}
+                    src={snapshotUrl(selected, searchedUrl)}
                   />
                 </div>
               </div>
@@ -922,9 +845,7 @@ export default function App() {
         <div className="footer-right">
           <span>DATA PROVIDED BY</span>
           <strong>THE INTERNET ARCHIVE</strong>
-          <span>
-            NO HISTORICAL DATA IS INVENTED.
-          </span>
+          <span>NO HISTORICAL DATA IS INVENTED.</span>
         </div>
       </footer>
     </main>

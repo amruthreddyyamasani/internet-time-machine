@@ -11,12 +11,12 @@ The web is constantly overwritten. Internet Time Machine treats the Wayback Mach
 ## How it works
 
 1. The app normalizes the URL entered by the user.
-2. It requests capture data from the [Wayback Machine CDX API](https://github.com/internetarchive/wayback/tree/master/wayback-cdx-server).
+2. It requests capture data through a same-origin server-side proxy at `/api/wayback`, which calls the [Wayback Machine timemap JSON endpoint](https://web.archive.org/web/timemap/json) and normalizes its capture-index response. This avoids browser CORS failures while keeping the archive request public and keyless.
 3. Only captures returned by the API are placed on the timeline. The app does not invent dates or historical results.
 4. Selecting a capture opens its archived URL in an iframe where the browser and archive permit embedding.
 5. If embedding is unavailable, the archived URL remains available through the **Open snapshot in new tab** link.
 
-The query uses `statuscode:200` and `collapse=digest` to keep the experience focused on unique, successfully captured responses rather than repeating identical captures.
+The upstream query uses `statuscode:200`, `collapse=digest`, and a bounded `limit` to keep the experience focused on unique, successfully captured responses rather than repeating identical captures or waiting indefinitely for an unbounded history. The normalized response keeps the existing CDX-shaped parser and UI contract.
 
 ## Run locally
 
@@ -45,6 +45,11 @@ npm run preview
 ├── index.html          # Vite HTML entry point
 ├── package.json        # Scripts and minimal dependencies
 ├── public/             # Reserved for small static assets
+├── api/
+│   ├── cdx.js           # Vercel-compatible production proxy handler
+│   └── wayback.js       # Production route alias
+├── server/
+│   └── cdxProxy.mjs     # Local Vite/preview proxy implementation
 ├── src/
 │   ├── App.jsx         # UI, search flow, timeline, viewer, compare mode
 │   ├── main.jsx        # React entry point
@@ -59,7 +64,7 @@ npm run preview
 - An archived page may load assets from different capture dates or fail to load some assets entirely. That is a limitation of the historical capture, not a fabricated replacement.
 - The timeline displays unique successful CDX captures returned for the requested URL. It is not a complete record of every asset or every page on a domain.
 - Wayback availability varies by URL. A valid website can legitimately return **NO ARCHIVED SNAPSHOTS FOUND**.
-- This is a client-only app. The browser calls the public CDX endpoint directly, so production deployments should consider a small proxy if the archive's CORS or rate-limit policy changes.
+- The browser does not call Wayback directly. Local development and preview use the Vite middleware proxy; Vercel deployments use the `/api/wayback` serverless route. This avoids the CDX endpoint's browser CORS behavior and keeps upstream transport server-side.
 
 ## Design notes
 
@@ -68,4 +73,3 @@ The interface intentionally avoids a generic SaaS dashboard: near-black paper, o
 ## License
 
 MIT. The Internet Archive and Wayback Machine are separate services with their own terms and policies; consult their documentation before operating this app at scale.
-

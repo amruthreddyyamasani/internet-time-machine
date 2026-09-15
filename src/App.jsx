@@ -66,7 +66,7 @@ export default function App() {
     setSnapshots([]);
     setCompareIndex(null);
     try {
-      const endpoint = `${WAYBACK}/cdx/search/cdx?url=${encodeURIComponent(target)}&output=json&fl=timestamp,statuscode,mimetype,digest&filter=statuscode:200&collapse=digest&limit=10000`;
+      const endpoint = `/api/wayback?url=${encodeURIComponent(target)}`;
       const response = await fetch(endpoint, { headers: { Accept: 'application/json' } });
       if (!response.ok) throw new Error(`Archive responded with HTTP ${response.status}.`);
       const rows = parseRows(await response.json());

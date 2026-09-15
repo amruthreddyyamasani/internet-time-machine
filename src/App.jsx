@@ -43,6 +43,7 @@ export default function App() {
   const [compareIndex, setCompareIndex] = useState(null);
   const [status, setStatus] = useState('idle');
   const [error, setError] = useState('');
+  const [errorTitle, setErrorTitle] = useState('INPUT ERROR');
   const [iframeError, setIframeError] = useState(false);
   const [showCompare, setShowCompare] = useState(false);
   const timelineRef = useRef(null);
@@ -56,9 +57,10 @@ export default function App() {
   async function searchArchive(event) {
     event?.preventDefault();
     setError('');
+    setErrorTitle('INPUT ERROR');
     setIframeError(false);
     let target;
-    try { target = normalizeUrl(url); } catch (err) { setStatus('error'); setError(err.message); return; }
+    try { target = normalizeUrl(url); } catch (err) { setStatus('error'); setErrorTitle('INPUT ERROR'); setError(err.message); return; }
     setUrl(target);
     setStatus('searching');
     setSnapshots([]);
@@ -80,6 +82,7 @@ export default function App() {
       window.setTimeout(() => document.querySelector('.archive-desk')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60);
     } catch (err) {
       setStatus('error');
+      setErrorTitle('ARCHIVE UNAVAILABLE');
       setError(err instanceof TypeError ? 'The archive could not be reached. Check your connection and try again.' : err.message);
     }
   }
@@ -105,7 +108,7 @@ export default function App() {
       <div className="noise" aria-hidden="true" />
       <header className="topbar">
         <a className="wordmark" href="#top" aria-label="Internet Time Machine home">ITM<span>/</span>01</a>
-        <div className="topbar-meta"><span className={`status-dot ${status === 'searching' ? 'is-searching' : ''}`} />{status === 'searching' ? 'SEARCHING ARCHIVE' : 'ARCHIVE CONNECTED'}<span className="topbar-separator">/</span>WAYBACK MACHINE</div>
+        <div className="topbar-meta"><span className={`status-dot ${status === 'searching' ? 'is-searching' : status === 'error' ? 'is-error' : ''}`} />{status === 'searching' ? 'SEARCHING ARCHIVE' : status === 'error' ? 'ARCHIVE UNAVAILABLE' : 'ARCHIVE CONNECTED'}<span className="topbar-separator">/</span>WAYBACK MACHINE</div>
       </header>
 
       <section className="hero" id="top">
@@ -129,7 +132,7 @@ export default function App() {
           </div>
           <div className="form-foot"><span>WAYBACK MACHINE / HISTORICAL WEB ARCHIVE</span><span>HTTPS PREFERRED</span></div>
         </form>
-        {status === 'error' && <div className="message error-message"><strong>INPUT ERROR</strong><span>{error}</span></div>}
+        {status === 'error' && <div className="message error-message"><strong>{errorTitle}</strong><span>{error}</span></div>}
         {status === 'empty' && <div className="message empty-message"><strong>NO ARCHIVED SNAPSHOTS FOUND</strong><span>The archive returned no captures for {searchedUrl}. Try the root domain or another URL.</span></div>}
       </section>
 
@@ -174,4 +177,3 @@ export default function App() {
     </main>
   );
 }
-

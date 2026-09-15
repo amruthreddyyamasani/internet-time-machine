@@ -23,3 +23,42 @@ button { cursor: pointer; }
 @media (max-width: 760px) { .topbar { padding: 0 20px; }.topbar-meta { font-size: 8px; }.topbar-meta .topbar-separator, .topbar-meta::first-letter { }.hero { padding: 50px 20px 78px; }.hero-grid { grid-template-columns: 1fr; gap: 43px; margin-top: 45px; }.hero-aside { max-width: 285px; margin-left: 17%; }.hero h1 { font-size: clamp(3.3rem, 16vw, 6rem); }.search-form { margin-top: 73px; }.search-row { display: grid; grid-template-columns: auto 1fr; padding: 14px 0 0; gap: 8px; }.protocol { padding: 0; }.search-row input { grid-column: 2; grid-row: 1; font-size: 18px; }.search-row button { grid-column: 1 / -1; margin-top: 12px; width: 100%; }.form-foot { font-size: 8px; gap: 15px; line-height: 1.4; }.form-foot span:last-child { text-align: right; }.message { flex-direction: column; gap: 7px; }.archive-desk { padding: 55px 20px 0; }.section-heading { align-items: start; flex-direction: column; gap: 28px; margin-bottom: 45px; }.result-count { align-self: end; text-align: right; }.timeline-wrap { padding: 0 37px; }.timeline-note { padding-bottom: 52px; font-size: 8px; }.snapshot-layout { grid-template-columns: 1fr; }.snapshot-info { display: grid; grid-template-columns: 1fr 1fr; gap: 0 18px; }.snapshot-info .eyebrow, .snapshot-info h3, .snapshot-info .travel-copy, .snapshot-info .metadata, .snapshot-info .nav-controls, .snapshot-info .open-link { grid-column: 1 / -1; }.snapshot-info h3 { margin-bottom: 20px; }.snapshot-date { font-size: 14px; }.snapshot-time { text-align: right; }.travel-copy { margin-top: 35px; }.viewer { min-height: 370px; height: 92vw; }.compare-section { margin-top: 75px; padding-bottom: 62px; }.compare-header { align-items: start; flex-direction: column; gap: 25px; }.compare-toggle { width: 100%; }.compare-controls { gap: 10px; align-items: center; }.compare-controls select, .compare-selected { padding: 11px 8px; font-size: 11px; }.versus { font-size: 9px; }.compare-grid { grid-template-columns: 1fr; }.compare-frame { height: 330px; }.footer { padding: 28px 20px 40px; flex-direction: column; gap: 30px; }.footer-right { align-items: start; }.loading-state { margin-left: 20px; padding: 0; } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; scroll-behavior: auto !important; transition-duration: .01ms !important; } }
 
+
+/* Screenshot-informed polish layer: preserves the existing archive instrument, but tightens narrow-screen rhythm. */
+.status-dot.is-error { background: #eaa4a4; box-shadow: 0 0 10px rgba(234,164,164,.55); }
+.error-message { background: rgba(218,121,121,.035); }
+.message span { line-height: 1.55; }
+
+@media (max-width: 760px) {
+  .topbar { height: 58px; padding: 0 20px; }
+  .wordmark { font-size: 13px; }
+  .topbar-meta { max-width: 66%; gap: 7px; font-size: 8px; line-height: 1.35; text-align: right; }
+  .hero { padding: 45px 20px 70px; }
+  .hero-kicker { gap: 9px; font-size: 8px; white-space: nowrap; }
+  .hero-line { flex: 1; min-width: 22px; }
+  .hero-grid { gap: 35px; margin-top: 39px; }
+  .hero-aside { max-width: 270px; margin-left: 15%; }
+  .hero-aside p { font-size: 15px; line-height: 1.35; margin-bottom: 34px; }
+  .aside-index { padding-left: 14px; line-height: 1.75; }
+  .search-form { margin-top: 65px; }
+  .search-form label { margin-bottom: 13px; font-size: 9px; }
+  .search-row { padding-top: 10px; gap: 7px; }
+  .protocol { font-size: 12px; }
+  .search-row input { font-size: 20px; }
+  .search-row button { min-height: 58px; margin-top: 15px; font-size: 10px; }
+  .form-foot { padding-top: 15px; font-size: 8px; }
+  .message { margin-top: 27px; padding: 18px 16px; gap: 9px; }
+  .message strong { font-size: 10px; }
+  .message span { font-size: 11px; }
+  .footer { padding: 30px 20px calc(42px + env(safe-area-inset-bottom)); gap: 34px; }
+  .footer p { margin-top: 18px; font-size: 10px; line-height: 1.75; }
+  .footer-right { gap: 9px; font-size: 8px; }
+}
+
+@media (max-width: 390px) {
+  .topbar-meta { max-width: 62%; font-size: 7px; }
+  .hero { padding-top: 39px; }
+  .hero h1 { font-size: 3.45rem; }
+  .hero-aside { margin-left: 12%; }
+  .form-foot { font-size: 7px; }
+}

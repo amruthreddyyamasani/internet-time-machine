@@ -221,10 +221,9 @@ export default function App() {
     setMachineActive(true);
 
     try {
-      // Direct Wayback CDX API Fallback if backend proxy endpoint isn't defined
-      const endpoint = `https://web.archive.org/cdx/search/cdx?url=${encodeURIComponent(
-        target
-      )}&output=json&fl=timestamp,original,digest&filter=statuscode:200&collapse=timestamp:8`;
+      // Use the same-origin production proxy. Direct browser calls to Wayback
+      // are blocked by CORS in deployed browsers.
+      const endpoint = `/api/wayback?url=${encodeURIComponent(target)}`;
 
       const response = await fetch(endpoint, {
         headers: {

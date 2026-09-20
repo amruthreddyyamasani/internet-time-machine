@@ -134,6 +134,24 @@ export default function App() {
     [snapshots]
   );
 
+  const timelineMonths = useMemo(() => {
+    const groups = new Map();
+    snapshots.forEach((item, index) => {
+      const key = item.timestamp.slice(0, 6);
+      if (!groups.has(key)) {
+        groups.set(key, {
+          key,
+          year: key.slice(0, 4),
+          month: key.slice(4),
+          index,
+          count: 0,
+        });
+      }
+      groups.get(key).count += 1;
+    });
+    return [...groups.values()];
+  }, [snapshots]);
+
   const earliest = snapshots[0];
   const latest = snapshots[snapshots.length - 1];
 
@@ -506,9 +524,9 @@ export default function App() {
 
               <div className="result-count">
                 <span>{snapshots.length.toLocaleString()}</span>{' '}
-                DAILY CAPTURES
+                UNIQUE CAPTURES
                 <br />
-                RETURNED BY CDX
+                RETURNED BY ARCHIVE
               </div>
             </div>
 
@@ -565,29 +583,27 @@ export default function App() {
               <div className="timeline-track">
                 <span className="track-line" />
 
-                {snapshots.map((item, index) => (
+                {timelineMonths.map((group, index) => (
                   <button
-                    key={`${item.timestamp}-${index}`}
+                    key={group.key}
                     className={`timeline-point ${
-                      index === selectedIndex ? 'selected' : ''
+                      group.key === selected?.timestamp.slice(0, 6) ? 'selected' : ''
                     }`}
                     style={{
                       left: `${
-                        snapshots.length === 1
+                        timelineMonths.length === 1
                           ? 50
-                          : (index / (snapshots.length - 1)) * 100
+                          : (index / (timelineMonths.length - 1)) * 100
                       }%`,
                     }}
-                    onClick={() => selectSnapshot(index)}
-                    title={`${formatShortDate(
-                      item.timestamp
-                    )} · ${formatTime(item.timestamp)}`}
+                    onClick={() => selectSnapshot(group.index)}
+                    title={`${formatShortDate(snapshots[group.index].timestamp)} · ${group.count} capture${group.count === 1 ? '' : 's'}`}
                     type="button"
                   >
                     <span className="point-halo" />
                     <span className="point-dot" />
                     <span className="point-label">
-                      {item.timestamp.slice(0, 4)}
+                      {group.year}/{group.month}
                     </span>
                   </button>
                 ))}
@@ -605,7 +621,7 @@ export default function App() {
           </div>
 
           <div className="timeline-note">
-            <span>DRAG / SCROLL TO TRAVEL THROUGH TIME</span>
+                <span>DRAG / SCROLL · EACH MARK IS A MONTH WITH ARCHIVED CAPTURES</span>
             <span>
               {selectedIndex + 1} / {snapshots.length}
             </span>

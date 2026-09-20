@@ -11,12 +11,14 @@ The web is constantly overwritten. Internet Time Machine treats the Wayback Mach
 ## How it works
 
 1. The app normalizes the URL entered by the user.
-2. It requests capture data through a same-origin server-side proxy at `/api/wayback`, which calls the [Wayback Machine timemap JSON endpoint](https://web.archive.org/web/timemap/json) and normalizes its capture-index response. This avoids browser CORS failures while keeping the archive request public and keyless.
+2. It requests capture data through a same-origin server-side proxy at `/api/wayback`, which calls the [Wayback Machine timemap JSON endpoint](https://web.archive.org/web/timemap/json) in historical decade, recent-year, and current-month windows, then normalizes and merges the real capture-index responses. This avoids browser CORS failures and the endpoint's forward-only limit while keeping the archive request public and keyless.
 3. Only captures returned by the API are placed on the timeline. The app does not invent dates or historical results.
 4. Selecting a capture opens its archived URL in an iframe where the browser and archive permit embedding.
 5. If embedding is unavailable, the archived URL remains available through the **Open snapshot in new tab** link.
 
-The upstream query uses `statuscode:200`, `collapse=digest`, and a bounded `limit` to keep the experience focused on unique, successfully captured responses rather than repeating identical captures or waiting indefinitely for an unbounded history. The normalized response keeps the existing CDX-shaped parser and UI contract.
+Each upstream query uses `statuscode:200`, `collapse=digest`, and a bounded `limit`. The client timeline groups captures by month so dense histories remain navigable while previous/next still moves through the complete chronological capture list. The normalized response keeps the existing CDX-shaped parser and UI contract.
+
+The interface defaults to the system color scheme on a first visit, supports an explicit light/dark toggle, and persists the selection in `localStorage`.
 
 ## Run locally
 
